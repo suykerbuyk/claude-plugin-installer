@@ -42,7 +42,7 @@ func Inject(paths Paths, cfg Config) error {
 		version = "0.0.0-dev"
 	}
 
-	if err := writeCacheManifests(paths, version, binaryPath); err != nil {
+	if err := writeCacheManifests(paths, version, binaryPath, cfg.ExtraArgs); err != nil {
 		return fmt.Errorf("writing cache manifests: %w", err)
 	}
 	now := time.Now().UTC()
@@ -128,9 +128,9 @@ func HasInstalledPluginRegistered(paths Paths) (bool, error) {
 	return found, nil
 }
 
-func writeCacheManifests(paths Paths, version, binaryPath string) error {
+func writeCacheManifests(paths Paths, version, binaryPath string, extraArgs []string) error {
 	pluginManifest := buildPluginManifest(paths.Identity, version)
-	mcpManifest := buildMcpManifest(paths.Identity, binaryPath, nil)
+	mcpManifest := buildMcpManifest(paths.Identity, binaryPath, extraArgs)
 
 	if err := writeJSONMode(paths.CachePluginManifest(version), pluginManifest, cacheFilePerm); err != nil {
 		return err

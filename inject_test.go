@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -40,6 +41,64 @@ func TestInject_FreshInstall(t *testing.T) {
 	has, err = HasInstalledPluginRegistered(paths)
 	if err != nil || !has {
 		t.Errorf("HasInstalledPluginRegistered = (%v, %v), want (true, nil)", has, err)
+	}
+}
+
+func TestInject_CacheMcpJsonIncludesExtraArgs(t *testing.T) {
+	home := t.TempDir()
+	paths := FromHome(home, testIdentity())
+	cfg := Config{
+		Version:    "0.2.0",
+		BinaryPath: "/bin/rezbldr",
+		ExtraArgs:  []string{"--vault", "/tmp/vault", "--extra-vault", "vibe=/tmp/vibe"},
+	}
+
+	if err := Inject(paths, cfg); err != nil {
+		t.Fatalf("Inject: %v", err)
+	}
+
+	data, err := os.ReadFile(paths.CacheMcpJson("0.2.0"))
+	if err != nil {
+		t.Fatalf("read cache .mcp.json: %v", err)
+	}
+	var doc map[string]mcpServerEntry
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse cache .mcp.json: %v", err)
+	}
+	entry, ok := doc[paths.Identity.PluginName]
+	if !ok {
+		t.Fatalf("cache .mcp.json missing entry for %q: %v", paths.Identity.PluginName, doc)
+	}
+
+	// Cache args must match live-marketplace args exactly: Identity.McpArgs
+	// followed by cfg.ExtraArgs. Claude Code launches from the cache, so any
+	// divergence makes ExtraArgs invisible to the running process.
+	wantArgs := append([]string{}, paths.Identity.McpArgs...)
+	wantArgs = append(wantArgs, cfg.ExtraArgs...)
+	if len(entry.Args) != len(wantArgs) {
+		t.Fatalf("cache args len = %d, want %d (got %v)", len(entry.Args), len(wantArgs), entry.Args)
+	}
+	for i := range wantArgs {
+		if entry.Args[i] != wantArgs[i] {
+			t.Errorf("cache args[%d] = %q, want %q", i, entry.Args[i], wantArgs[i])
+		}
+	}
+
+	// And the cache .mcp.json must exactly equal the live-marketplace
+	// .mcp.json that Generate would have written for the same Config.
+	if err := Generate(paths, cfg); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	liveData, err := os.ReadFile(paths.McpJson)
+	if err != nil {
+		t.Fatalf("read live .mcp.json: %v", err)
+	}
+	var liveDoc map[string]mcpServerEntry
+	if err := json.Unmarshal(liveData, &liveDoc); err != nil {
+		t.Fatalf("parse live .mcp.json: %v", err)
+	}
+	if !reflect.DeepEqual(doc, liveDoc) {
+		t.Errorf("cache vs live .mcp.json differ\ncache: %v\nlive:  %v", doc, liveDoc)
 	}
 }
 
