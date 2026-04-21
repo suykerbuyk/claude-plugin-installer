@@ -1,0 +1,5 @@
+/CLAUDE.md
+/commit.msg
+/.claude/
+*.test
+/coverage.out
